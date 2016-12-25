@@ -1,0 +1,119 @@
+---
+title: "Course Project - Practical Machine Learning"
+author: "Rinosh Polavarapu"
+date: "December 22, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+To quantify the workout done by any person, the relevant heart rate data during the activity is required.Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior. But the quantified data needs to be analyzed and present in a more qualitative manner. The goal of the present project is use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+Few important things to be addressed in this project are:
+
+1. How the model that predicts the manner in which the individual exercise(**classe** variable) is built?
+2. How the cross validation of predicted data with real data was performed?
+3. What is the expected Out of Sample error?
+
+## 1. Loading Data and Required librarites
+```{r Libraries, echo=TRUE, warning=FALSE, message=FALSE}
+library(caret)
+library(randomForest)
+library(gbm)
+library(plyr)
+
+```
+
+The .csv files related to training and testing are obtained from the coursera site are saved in the working director and assigned to variables 
+```{r Getting_and_cleaning_data, echo=TRUE, warning=FALSE, message=FALSE}
+### Data from .csv files and assign blanks, and observations divided 0 etc as NA
+training_main <- read.csv("pml-training.csv", na.strings = c("NA","","#DIV/0!"))
+testing_main <- read.csv("pml-testing.csv", na.strings = c("NA","","#DIV/0!"))
+
+### Cleaning data by getting rid of variables with NA observations 
+training_main <- training_main[,colSums(is.na(training_main))==0 ]
+testing_main <- testing_main[,colSums(is.na(testing_main))==0 ]
+
+### Removing initial 6 columns(variables) which are just identification variables
+training_main <- training_main[,-(1:7) ]
+testing_main <- testing_main[,-(1:7) ]
+
+```
+
+## 2. Creating Partition using training data set furtherly into testing and training sets
+
+```{r Partition, echo=TRUE, warning=FALSE, message=FALSE}
+inTrain <- createDataPartition(training_main$classe, p=0.7, list = FALSE)
+training_sub <- training_main[inTrain,]
+testing_sub <- training_main[-inTrain,]
+```
+
+The following columns are used in models bulit in section 3 to predict the **classe** variable.
+
+```{r col_names, echo=TRUE, warning=FALSE, message=FALSE}
+print(names(training_main[,-53]))
+
+```
+
+## 3. Prediction Models
+In order to predict the outcomes of classe variable in test data set, two different methods (1. Random Forests & 2. Boosting with Trees (**gbm**)) are employed.
+
+### 3.1 Random Forest
+
+```{r random_forest, echo=TRUE, warning=FALSE, message=FALSE, cache=TRUE}
+set.seed(333)
+tr_control_RF <- trainControl(method = "cv",number = 5, verboseIter = FALSE, savePredictions = "final")
+modFit_RF <- train(classe ~ .,data = training_sub, method = "rf", trControl = tr_control_RF)
+print(modFit_RF$finalModel)
+```
+
+```{r prediction_RF, echo=TRUE, warning=FALSE, message=FALSE}
+pred_RF <- predict(modFit_RF, newdata = testing_sub)
+conf_mat_RF <- confusionMatrix(pred_RF,testing_sub$classe)
+print(conf_mat_RF, digits = 3)
+```
+```{r plot_confusionMatrix_RF, echo=TRUE, warning=FALSE, message=FALSE}
+plot(conf_mat_RF$table, col=conf_mat_RF$byClass, main = paste("Random Forest Prediction Model with accuracy -", round(conf_mat_RF$overall['Accuracy'],3)))
+```
+
+### 3.2 Boosting with Trees (Generalized Boosting Model)
+```{r gbm, echo=TRUE, warning=FALSE, message=FALSE, cache=TRUE}
+set.seed(333)
+tr_control_GBM <- trainControl(method = "cv",number = 5, verboseIter = FALSE, savePredictions = "final")
+modFit_GBM <- train(classe ~ .,data = training_sub, method = "gbm", trControl = tr_control_GBM, verbose = FALSE)
+print(modFit_GBM$finalModel)
+```
+
+```{r prediction_GBM, echo=TRUE, warning=FALSE, message=FALSE}
+pred_GBM <- predict(modFit_GBM, newdata = testing_sub)
+conf_mat_GBM <- confusionMatrix(pred_GBM,testing_sub$classe)
+print(conf_mat_GBM, digits = 3)
+```
+
+```{r plot_confusionMatrix_GBM, echo=TRUE, warning=FALSE, message=FALSE}
+plot(conf_mat_GBM$table, col=conf_mat_GBM$byClass, main = paste("Generalized Boosting Prediction Model with accuracy -", round(conf_mat_GBM$overall['Accuracy'],3)))
+```
+
+## 4. Out of Sample error
+
+Out of Sample error rate is the error rate on new data sets. In this case, it is nothing but 1-Accuracy of predicted outcomes.
+
+Therefore, Out of Sample error for prediction models using -   
+a) Random Forest method: 1-0.992 = 0.008    
+b) Generalized Boosting method : 1 - 0.956 = 0.044   
+
+## 5. Conclusion with Main testing set
+
+The classe variable for the testing set with 20 observations is to be predicted with the best possible model. It is obvious that the prediction model with Random Forest method is better of the two models as the accuracy is comparitively higher.   
+
+Hence, using model with Random Forest method, the predictions for 20 observations is shown below:  
+
+```{r testing_final, echo=TRUE, warning=FALSE, message=FALSE}
+predict_finalTesting <- predict(modFit_RF ,newdata =testing_main )
+print(predict_finalTesting)
+```
+
